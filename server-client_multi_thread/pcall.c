@@ -6,13 +6,13 @@
 #include <lauxlib.h>
 #include <lualib.h>
       
-void thread_1(void* args)
+void * thread_1(void* args)
 {  
     lua_State *L;  
     if(NULL == (L = luaL_newstate()))  
     {  
         perror("luaL_newstate failed");  
-        return ;  
+        return NULL;
     }
     
     luaL_openlibs(L);
@@ -20,7 +20,7 @@ void thread_1(void* args)
     if(luaL_loadfile(L, "./mclient1.lua"))  
     {  
         perror("loadfile failed");  
-        return ;  
+        return NULL;  
     }
     
      lua_pcall(L, 0, 0, 0);//Lua handles a chunk as the body of an anonymous function with a variable number of arguments. Call it.  
@@ -38,13 +38,13 @@ void thread_1(void* args)
 }
 
       
-void thread_2(void* args)
+void * thread_2(void* args)
 {  
     lua_State *L;  
     if(NULL == (L = luaL_newstate()))  
     {  
         perror("luaL_newstate failed");  
-        return ;  
+        return NULL;
     }
     
     luaL_openlibs(L);
@@ -52,7 +52,7 @@ void thread_2(void* args)
     if(luaL_loadfile(L, "./mclient2.lua"))  
     {  
         perror("loadfile failed");  
-        return;  
+        return NULL;
     }
     
      lua_pcall(L, 0, 0, 0);//Lua handles a chunk as the body of an anonymous function with a variable number of arguments. Call it.  
@@ -71,20 +71,19 @@ void thread_2(void* args)
 
 int main(int argc, const char *argv[])
 {
-	pthread_t pid1, pid2;
-	if(pthread_create(&pid1, NULL, thread_1, NULL))
+	pthread_t pid[2];
+	if(pthread_create(&pid[0], NULL, thread_1, NULL))
 	{
 		return -1;
 	}
 	
-	if(pthread_create(&pid2, NULL, thread_2, NULL))
+	if(pthread_create(&pid[1], NULL, thread_2, NULL))
 	{
 		return -1;
 	}
 
-	while(1){
-		sleep(1000);//long sleep
-	}
+	pthread_join(pid[0],NULL);
+	pthread_join(pid[1],NULL);
 	return 0;
 }
 
