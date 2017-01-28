@@ -10,3 +10,7 @@ demos for lua
 ### server_client_multi_thread: This is enhanced client demo with multi_thread. Each client thread calls a lua file to send data to server.
 ### 4.<br />
 ### iterator: Demo for iterator, copied from "Programming in Lua".
+### 5.<br />
+### epoll: Demo for epoll model, no libs is needed, just run it in root model. Client is implemented in lua.
+### 6.<br />
+### clib: Lib in c for lua.
