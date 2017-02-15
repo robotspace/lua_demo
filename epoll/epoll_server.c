@@ -4,12 +4,11 @@
 #include <string.h>
 #include <sys/types.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #include <arpa/inet.h>
-#include <openssl/ssl.h>
-#include <openssl/err.h>
 #include <fcntl.h>
 #include <sys/epoll.h>
 #include <sys/time.h>
@@ -32,6 +31,10 @@ typedef struct myevent_s myevent_s;
 
 int g_epoll_fd = -1;
 myevent_s g_events[MAXEPOLLSIZE + 1]; // g_events[MAXEPOLLSIZE] is used
+int keep_alive = 1; // enable keepalive
+int keep_idle = 60; // if no data comes in,then begin to probe, unit is second.
+int keep_interval = 5; // time interval for probe, unit is second.
+int keep_count = 3; // total times of probe
 
 void receive_data(int fd, int events, void *arg);
 void send_data(int fd, int events, void *arg);
@@ -129,7 +132,7 @@ void send_data(int fd, int events, void *arg) {
      else
      {
          close(ev->fd);
-         printf("recv[fd=%d] error[%d]\n", fd, errno);
+         printf("send_data[fd=%d] error[%d]\n", fd, errno);
      }
  }
 
@@ -151,7 +154,7 @@ void receive_data(int fd, int events, void *arg)  {
          printf("[fd=%d] closed gracefully.\n", fd);
      }  else{
          close(ev->fd);
-         printf("recv[fd=%d] error[%d]:%s\n", fd, errno, strerror(errno));
+         printf("receive_data[fd=%d] error[%d]:%s\n", fd, errno, strerror(errno));
      }
  }
  
@@ -159,6 +162,12 @@ void init_listen_socket(int epoll_fd, short port) {
      int listen_fd = socket(AF_INET, SOCK_STREAM, 0);
      fcntl(listen_fd, F_SETFL, O_NONBLOCK); // set non-blocking
      printf("server listen fd=%d\n\r", listen_fd);
+#if 1
+  setsockopt(listen_fd, SOL_SOCKET, SO_KEEPALIVE, (void *)&keep_alive, sizeof(keep_alive));
+  setsockopt(listen_fd, SOL_TCP, TCP_KEEPIDLE, (void*)&keep_idle, sizeof(keep_idle));
+  setsockopt(listen_fd, SOL_TCP, TCP_KEEPINTVL, (void *)&keep_interval, sizeof(keep_interval));
+  setsockopt(listen_fd, SOL_TCP, TCP_KEEPCNT, (void *)&keep_count, sizeof(keep_count)); 
+#endif
      event_set(&g_events[ MAXEPOLLSIZE], listen_fd, accept_conn, &g_events[ MAXEPOLLSIZE]);  //set as the last one to decrease find-time for new conn slot
      // add listen socket
      event_add(epoll_fd, EPOLLIN|EPOLLET, &g_events[MAXEPOLLSIZE]);
@@ -193,7 +202,6 @@ int main(int argc, char **argv)
         printf("set RLIMIT_NOFILE successfully.\n\r");
     }
    
-    /* 创建 epoll 句柄，把监听 socket 加入到 epoll 集合里 */
     g_epoll_fd = epoll_create(MAXEPOLLSIZE);
     if(g_epoll_fd <= 0) printf("create epoll failed.%d\n", g_epoll_fd);
 
@@ -215,13 +223,13 @@ int main(int argc, char **argv)
                  event_del(g_epoll_fd, &g_events[check_pos]);
              }
          }
-        /* 等待有事件发生 */
+        /* wait for some event */
         nfds = epoll_wait(g_epoll_fd, events, MAXEPOLLSIZE, -1);
         if (nfds == -1){
             perror("epoll_wait");
             break;
         }
-        /* 处理所有事件 */
+        /* handle all events */
         for (int i = 0; i < nfds; ++i){
              myevent_s *ev = (struct myevent_s*)events[i].data.ptr;
              if((events[i].events&EPOLLIN)&&(ev->events&EPOLLIN)) // read event
