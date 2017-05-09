@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <string.h>
-#include <sys/types.h>
+//#include <sys/types.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <sys/socket.h>
@@ -57,15 +57,14 @@ void event_set(myevent_s *ev, int fd, void (*call_back)(int, int, void*), void *
      epv.events = ev->events = events;
      if(ev->status == 1){
          op = EPOLL_CTL_MOD;
-     }
-     else{
+     }else{
          op = EPOLL_CTL_ADD;
          ev->status = 1;
      }
      if(epoll_ctl(epoll_fd, op, ev->fd, &epv) < 0)
-         printf("Event Add failed[fd=%d]\n", ev->fd);
+         printf("event add failed[fd=%d]\n", ev->fd);
      else
-         printf("Event Add OK[fd=%d]\n", ev->fd);
+         printf("event add OK[fd=%d]\n", ev->fd);
  }
 
  // delete an event from epoll  
@@ -91,18 +90,21 @@ void accept_conn(int fd, int events, void *arg){
      int nfd, i;
      // accept
      if((nfd = accept(fd, (struct sockaddr*)&sin, &len)) == -1){
-         if(errno != EAGAIN && errno != EINTR){
+	 if(errno == EPERM){//Firewall rules forbid connection on linux platform.
+	     printf("%s: firewall not permitted", __func__);
+	 }else if(errno != EAGAIN && errno != EINTR){
+		 //if errno == EAGAIN try again;
              printf("%s: bad accept", __func__);  
          }
          return;
      }
      do {  //find the first unused slot
          for(i = 0; i < MAXEPOLLSIZE; i++) {
-             if(g_events[i].status == 0)
-             {
+             if(g_events[i].status == 0){
                  break;
              }
          }
+	 
          if(i ==  MAXEPOLLSIZE){
              printf("%s:max connection limit[%d].", __func__,  MAXEPOLLSIZE);
              break;
@@ -123,14 +125,10 @@ void send_data(int fd, int events, void *arg) {
      len = send(fd, ev->buff, ev->len, 0);
      ev->len = 0;
      event_del(g_epoll_fd, ev);
-     if(len > 0)
-     {
-         // change to receive event
+     if(len > 0){// change to receive event
          event_set(ev, fd, receive_data, ev);
          event_add(g_epoll_fd, EPOLLIN|EPOLLET, ev);
-     }
-     else
-     {
+     }else{
          close(ev->fd);
          printf("send_data[fd=%d] error[%d]\n", fd, errno);
      }
@@ -163,10 +161,10 @@ void init_listen_socket(int epoll_fd, short port) {
      fcntl(listen_fd, F_SETFL, O_NONBLOCK); // set non-blocking
      printf("server listen fd=%d\n\r", listen_fd);
 #if 1
-  setsockopt(listen_fd, SOL_SOCKET, SO_KEEPALIVE, (void *)&keep_alive, sizeof(keep_alive));
-  setsockopt(listen_fd, SOL_TCP, TCP_KEEPIDLE, (void*)&keep_idle, sizeof(keep_idle));
-  setsockopt(listen_fd, SOL_TCP, TCP_KEEPINTVL, (void *)&keep_interval, sizeof(keep_interval));
-  setsockopt(listen_fd, SOL_TCP, TCP_KEEPCNT, (void *)&keep_count, sizeof(keep_count)); 
+     setsockopt(listen_fd, SOL_SOCKET, SO_KEEPALIVE, (void *)&keep_alive, sizeof(keep_alive));
+     setsockopt(listen_fd, SOL_TCP, TCP_KEEPIDLE, (void*)&keep_idle, sizeof(keep_idle));
+     setsockopt(listen_fd, SOL_TCP, TCP_KEEPINTVL, (void *)&keep_interval, sizeof(keep_interval));
+     setsockopt(listen_fd, SOL_TCP, TCP_KEEPCNT, (void *)&keep_count, sizeof(keep_count)); 
 #endif
      event_set(&g_events[ MAXEPOLLSIZE], listen_fd, accept_conn, &g_events[ MAXEPOLLSIZE]);  //set as the last one to decrease find-time for new conn slot
      // add listen socket
@@ -187,11 +185,10 @@ int main(int argc, char **argv)
     int listener, new_fd, kdpfd, nfds, n, ret, curfds;
     socklen_t len;
     struct sockaddr_in my_addr, their_addr;
-    unsigned int myport, lisnum;
+    unsigned int port = 12345, lisnum;
     struct epoll_event ev;
     struct epoll_event events[MAXEPOLLSIZE];
     struct rlimit rt;
-    myport = 12345;
     lisnum = 5;
     /* set max numb of file resource in this process */
     rt.rlim_max = rt.rlim_cur = MAXEPOLLSIZE;
@@ -205,19 +202,17 @@ int main(int argc, char **argv)
     g_epoll_fd = epoll_create(MAXEPOLLSIZE);
     if(g_epoll_fd <= 0) printf("create epoll failed.%d\n", g_epoll_fd);
 
-    init_listen_socket(g_epoll_fd, 12345);
+    init_listen_socket(g_epoll_fd, port);
     int check_pos = 0;
     curfds = 1;//file descriptors num at present
     while (1) {
 	    //a simple timeout check here, every time 100, better to use a mini-heap, and add timer event
 	long now = time(NULL);
-	for(int i = 0; i < 100; i++, check_pos++) // doesn't check listen fd
-         {
+	for(int i = 0; i < 100; i++, check_pos++){ // doesn't check listen fd
              if(check_pos == MAXEPOLLSIZE) check_pos = 0; // recycle
              if(g_events[check_pos].status != 1) continue;
              long duration = now - g_events[check_pos].last_active;
-             if(duration >= 3600) //3600s timeout
-             {
+             if(duration >= 3600){ //3600s timeout
                  close(g_events[check_pos].fd);
                  printf("[fd=%d] timeout[%d--%d].\n", g_events[check_pos].fd, g_events[check_pos].last_active, now);
                  event_del(g_epoll_fd, &g_events[check_pos]);
@@ -232,15 +227,13 @@ int main(int argc, char **argv)
         /* handle all events */
         for (int i = 0; i < nfds; ++i){
              myevent_s *ev = (struct myevent_s*)events[i].data.ptr;
-             if((events[i].events&EPOLLIN)&&(ev->events&EPOLLIN)) // read event
-             {
+             if((events[i].events&EPOLLIN)&&(ev->events&EPOLLIN)){ // read event
                  ev->call_back(ev->fd, events[i].events, ev->arg);
              }
              if((events[i].events&EPOLLOUT)&&(ev->events&EPOLLOUT)) // write event
              {
                  ev->call_back(ev->fd, events[i].events, ev->arg);
              }
-
         }
     }
     if(g_epoll_fd > 0)
