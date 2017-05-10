@@ -182,14 +182,10 @@ void init_listen_socket(int epoll_fd, short port) {
 
 int main(int argc, char **argv)
 {
-    int listener, new_fd, kdpfd, nfds, n, ret, curfds;
-    socklen_t len;
-    struct sockaddr_in my_addr, their_addr;
-    unsigned int port = 12345, lisnum;
-    struct epoll_event ev;
-    struct epoll_event events[MAXEPOLLSIZE];
+    unsigned int port = 12345;
+    struct epoll_event ev, events[MAXEPOLLSIZE];
     struct rlimit rt;
-    lisnum = 5;
+
     /* set max numb of file resource in this process */
     rt.rlim_max = rt.rlim_cur = MAXEPOLLSIZE;
     if (setrlimit(RLIMIT_NOFILE, &rt) == -1){
@@ -204,7 +200,7 @@ int main(int argc, char **argv)
 
     init_listen_socket(g_epoll_fd, port);
     int check_pos = 0;
-    curfds = 1;//file descriptors num at present
+
     while (1) {
 	    //a simple timeout check here, every time 100, better to use a mini-heap, and add timer event
 	long now = time(NULL);
@@ -219,7 +215,7 @@ int main(int argc, char **argv)
              }
          }
         /* wait for some event */
-        nfds = epoll_wait(g_epoll_fd, events, MAXEPOLLSIZE, -1);
+        int nfds = epoll_wait(g_epoll_fd, events, MAXEPOLLSIZE, -1);
         if (nfds == -1){
             perror("epoll_wait");
             break;
@@ -230,8 +226,7 @@ int main(int argc, char **argv)
              if((events[i].events&EPOLLIN)&&(ev->events&EPOLLIN)){ // read event
                  ev->call_back(ev->fd, events[i].events, ev->arg);
              }
-             if((events[i].events&EPOLLOUT)&&(ev->events&EPOLLOUT)) // write event
-             {
+             if((events[i].events&EPOLLOUT)&&(ev->events&EPOLLOUT)){ // write event
                  ev->call_back(ev->fd, events[i].events, ev->arg);
              }
         }
