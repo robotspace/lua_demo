@@ -15,8 +15,3 @@ demos for lua
 ### 6.<br />
 ### clib: Lib in c for lua.
 
-
-|字段1|字段2|	类型	|描述	|必填|	备注|
-|:---|:---|:---|:---|:---|:---|
-|categoryList|category	|int|	类型|	Y	|如1:塌落痕迹、2:烟熏痕迹|
-||categoryName	|string|	类型名称|	Y	|塌落痕迹、烟熏痕迹|
