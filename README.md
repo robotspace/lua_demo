@@ -14,3 +14,9 @@ demos for lua
 ### epoll: Demo for epoll model, no libs is needed, just run it in root model. Client is implemented in lua.
 ### 6.<br />
 ### clib: Lib in c for lua.
+
+|字段	|类型	|描述|	必填|	备注|
+|:---|:---|:---|:---|:---|
+|rows|	int|	每页多少条|	N	|默认20条|
+|page|	int|	获取第几页|	Y	||
+|category|	int|	哪一类文件|	Y	|如1:火灾性质认定、2:起火方式认定|
